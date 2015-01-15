@@ -64,6 +64,12 @@ From this data, the following time series was generated:
 plot(intData$meanSteps ~ intData$interval, type="l", xlab="Interval (minutes since 12:00AM)", ylab="Mean Steps per Interval", main="Mean Steps Take per Interval Each Day")
 ```
 
+We can also see a significant peak in the early afternoon. By sorting the mean steps into descending order we can see that most active 5-minute interval (on average) is interval 835 (~2:00PM). We can further see that the three intervals immediately following 835 and the one right before it round out the top 5.
+
+```{r Most Active Intervals}
+arrange(intData, desc(meanSteps))[(1:5),]
+```
+
 ## Imputing missing values
 Missing values may be biasing the report. First it was determined how many missing observations there were.
 
