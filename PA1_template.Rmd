@@ -1,25 +1,161 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
 output: 
-  html_document:
-    keep_md: true
+  html_document
 ---
-
+The following report details the analysis of 61 days of data taken between October 1 and November 30, 2012. Each day during this period, a single individual recorded how many step they took throughout the day. Step counts were recorded in 5-minute intervals (288 observations per day). The original, unprocessed (by this analyst) data was made available through the Coursera Reproducible Data course downloaded on January 14, 2015 from here: https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip. It is available in the GitHub repository holding the files for this analysis.
 
 ## Loading and preprocessing the data
+Analysis was performed using R version 3.1.2 and RStudio version 0.98.1062. Some data manipulation, detailed below also used the dplyer package version 0.3.0.2. Some plots were made using ggplot2 version 1.0.0.
 
+```{r Load Packages, echo=FALSE, hide=TRUE, message=FALSE }
+install.packages("dplyr", repos="http://cran.rstudio.com/")
+install.packages("ggplot2", repos="http://cran.rstudio.com/")
+library(dplyr)
+library(ggplot2)
+```
 
+Data was loaded into R; date data were coerced into date format, and the result was converted into a data fram tbl for use with dplyr.
+
+```{r Load and Process the Data}
+mData <- read.csv("activity.csv", stringsAsFactors = FALSE)
+mData$date <- as.Date(mData$date)
+mData <- tbl_df(mData)
+```
 
 ## What is mean total number of steps taken per day?
+The data was grouped by day and summarized by summing each 5-minute interval for each day to calculate a single sum for each of the 61 days. The figure below is a histogram of the steps taken each day. For this quick peak at the data, NAs were simply ignored. The bin width is 1000 steps and the red line indicates the mean number of steps.
 
+```{r, Histogram of Daily Step Counts}
+byDayNA <- group_by(mData, date)
+sumDayNA <- summarize(byDayNA, steps = sum(steps))
+ggplot(sumDayNA, aes(x=steps)) + 
+        geom_histogram(binwidth=1000, colour="black", fill="white") + 
+        ggtitle("Histogram of Daily Steps") +
+        theme(panel.background = element_rect(fill = 'white', colour = 'red')) + 
+        geom_vline(aes(xintercept=mean(steps, na.rm=T)), color="red", linetype="dashed", size=1)
+```
 
+The mean and median steps taken are displayed in the following table:
+
+```{r Mean and Median Steps}
+meanStepsNA <- mean(sumDayNA$steps, na.rm=TRUE)
+medStepsNA <- median(sumDayNA$steps, na.rm=TRUE)
+Table1 <- matrix(c(meanStepsNA, medStepsNA), ncol=2, byrow=TRUE)
+colnames(Table1) <- c("MEAN", "MEDIAN")
+rownames(Table1) <- c("")
+Table1 <- as.table(Table1)
+Table1
+```
 
 ## What is the average daily activity pattern?
+In order to get a general picture of what the average day looked like for the subject, we first calculated, and then plotted the mean steps per interval (e.g., "How many steps did the participate take, on average, at 12:00AM, at 12:05, ...at 11:55PM")
+
+```{r Calculate Mean Steps per Interval}
+intData <- mData %>% 
+        group_by(interval) %>% 
+        summarize(meanSteps = mean(steps, na.rm = TRUE))
+```
 
 
+From this data, the following time series was generated:
+
+```{r Time Series of Average Steps Taken in each Interval}
+plot(intData$meanSteps ~ intData$interval, type="l", xlab="Interval (minutes since 12:00AM)", ylab="Mean Steps per Interval", main="Mean Steps Take per Interval Each Day")
+```
 
 ## Imputing missing values
+Missing values may be biasing the report. First it was determined how many missing observations there were.
 
+```{r Calculate the Number of NAs}
+mInt <- sum(is.na(mData))
+mDay <- sum(is.na(sumDayNA))
+Table2 <- matrix(c(mInt, mDay), ncol=1, byrow=TRUE)
+colnames(Table2) <- c("")
+rownames(Table2) <- c("Missing Intervals: ", "Missing Days: ")
+Table2 <- as.table(Table2)
+Table2
+```
+Having determined that eight days (a total of 2,304 intervals) were missing, a method was deviced to replace the NAs. Although this can be done a variety of ways, the method chosen here was to replace each missing interval with the previously calculated average for that interval. 
 
+To do this, the interval averages were merged with the processed data set. (The "interval" column was removed to avoid duplication after merging.)
+
+```{r Replace Missing Data with Interval Means}
+intData <- select(intData, meanSteps)
+mData2 <- cbind(mData, intData)
+for (i in 1:17568) {
+        if (is.na(mData2$steps[i])) {
+                mData2$newSteps[i] <- mData2$meanSteps[i]
+        } else {mData2$newSteps[i] <- mData2$steps[i]
+        }
+}
+mData2 <- select(mData2, newSteps, date, interval)
+```
+
+From this new dataset, a new histogram was generated.
+
+```{r Histogram of Data with Imputed Values}
+byDay <- group_by(mData2, date)
+sumDay <- summarize(byDay, newSteps = sum(newSteps))
+meanSteps <- mean(sumDay$newSteps)
+medSteps <- median(sumDay$newSteps)
+ggplot(sumDay, aes(x=newSteps)) + 
+        geom_histogram(binwidth=1000, colour="black", fill="white") + 
+        ggtitle("Histogram of Daily Steps") +
+        theme(panel.background = element_rect(fill = 'white', colour = 'red')) +
+        geom_vline(aes(xintercept=mean(newSteps, na.rm=T)), color="red", linetype="dashed", size=1)
+```
+
+It should be obvious that the mean appears to be located in the same place and at the same height. The largest changes are observed on either side of the mean, where values have been "toned down," that is, they are not as high. This is obviously the work of the mean values helping to create larger denominators and thus lowering the means. The previous mean, however, is unaffected since the imputed values were computed from the same figures that helped create the original mean.
+
+To determine if the mean truly is the same, the new and old medians and means are including in the table below:
+
+```{r Comparing Previous Medians and Mean with Those Derived with Imputed Values}
+Table3 <- matrix(c(meanStepsNA, medStepsNA, meanSteps, medSteps), ncol=2, byrow=TRUE)
+colnames(Table3) <- c("MEAN", "MEDIAN")
+rownames(Table3) <- c("Previous Values", "with Imputed Values")
+Table3 <- as.table(Table3)
+Table3
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+Finally, the subject's weekday habits were compared to his weekend habits. In order to do this, a new factor was added to the dataset grouping each day into those two categories (Monday- Friday = "weekday"; Saturday & Sunday = "weekend".) 
+
+```{r Adding Weekend and Weekday factor variable to set}
+for (i in 1:17568) {
+        if (weekdays(mData2$date[i]) == "Saturday") {
+                mData2$day[i] <- "weekend"
+        } else if (weekdays(mData2$date[i]) == "Sunday") {
+                mData2$day[i] <- "weekend"
+        } else mData2$day[i] <- "weekday"
+}
+mData2$day <- as.factor(mData2$day)
+
+weekdays <- filter(mData2, day == "weekday") %>%
+        group_by(interval) %>%
+        summarize(mean = mean(newSteps))
+
+weekends <- filter(mData2, day == "weekend") %>%
+        group_by(interval) %>%
+        summarize(mean = mean(newSteps))
+
+days <- group_by(mData2, interval, day) %>% 
+        summarize(meanSteps = mean(newSteps)) 
+```
+
+A panel plot was made to easily compare these two sets and make any variation between the two more obvious:
+
+```{r Panel Plot of Weekend vs. Weekend Data}
+ggplot(data = days, mapping = aes(x = interval, y = meanSteps)) + 
+        geom_line() + facet_grid(day ~ .) + scale_x_continuous("5-Minute Intervals", 
+        breaks = seq(min(days$interval), max(days$interval), 100)) +
+        theme(panel.background = element_rect(fill = 'white', colour = 'red')) + 
+        scale_y_continuous("Average Number of Steps") + 
+        ggtitle("Average Number of Steps Taken Throughout the Day")
+```
+
+A few things to take notice of:
+* Over the weekend there seems to be low-level activity that starts earlier in the day.
+* The activity more gradually rises (note the steep cliff around the 525 interval during the week.)
+* The weekend peak is lower than the weekday peak
+* The weekend afternoon, in general, seems more active than the weekday
